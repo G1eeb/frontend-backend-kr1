@@ -3,11 +3,15 @@ const cors = require('cors');
 const app = express();
 const port = 3000;
 
+// Подключаем Swagger
+const swaggerJsdoc = require('swagger-jsdoc');
+const swaggerUi = require('swagger-ui-express');
+
 // Middleware
 app.use(express.json());
 app.use(cors({ origin: "http://localhost:3001", methods: ["GET", "POST", "PATCH", "DELETE"] }));
 
-// Начальные данные: 10+ товаров (геймерские девайсы)
+// Начальные данные: 12 товаров (геймерские девайсы)
 let products = [
     { id: 1, name: 'Игровая мышь Logitech G502', category: 'Мыши', description: 'Высокоточная мышь с 11 программируемыми кнопками и подсветкой RGB', price: 4990, stock: 15, rating: 4.8 },
     { id: 2, name: 'Механическая клавиатура HyperX Alloy', category: 'Клавиатуры', description: 'Механические переключатели Red, RGB подсветка, металлический корпус', price: 8990, stock: 8, rating: 4.9 },
@@ -29,22 +33,191 @@ app.use((req, res, next) => {
     next();
 });
 
-// GET /products - все товары
+// ==================== SWAGGER КОНФИГУРАЦИЯ ====================
+
+const swaggerOptions = {
+    definition: {
+        openapi: '3.0.0',
+        info: {
+            title: 'API интернет-магазина GAMER GEAR',
+            version: '1.0.0',
+            description: 'API для управления товарами в магазине геймерских девайсов',
+        },
+        servers: [
+            {
+                url: `http://localhost:${port}`,
+                description: 'Локальный сервер',
+            },
+        ],
+    },
+    apis: ['./app.js'],
+};
+
+const swaggerSpec = swaggerJsdoc(swaggerOptions);
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+
+// ==================== SWAGGER СХЕМЫ ====================
+
+/**
+ * @swagger
+ * components:
+ *   schemas:
+ *     Product:
+ *       type: object
+ *       required:
+ *         - name
+ *         - category
+ *         - description
+ *         - price
+ *         - stock
+ *       properties:
+ *         id:
+ *           type: integer
+ *           description: Уникальный идентификатор товара
+ *           example: 1
+ *         name:
+ *           type: string
+ *           description: Название товара
+ *           example: "Игровая мышь Logitech G502"
+ *         category:
+ *           type: string
+ *           description: Категория товара
+ *           example: "Мыши"
+ *         description:
+ *           type: string
+ *           description: Описание товара
+ *           example: "Высокоточная мышь с 11 программируемыми кнопками"
+ *         price:
+ *           type: number
+ *           description: Цена в рублях
+ *           example: 4990
+ *         stock:
+ *           type: integer
+ *           description: Количество на складе
+ *           example: 15
+ *         rating:
+ *           type: number
+ *           description: Рейтинг товара (0-5)
+ *           example: 4.8
+ *     ErrorResponse:
+ *       type: object
+ *       properties:
+ *         error:
+ *           type: string
+ *           description: Сообщение об ошибке
+ */
+
+// ==================== CRUD ОПЕРАЦИИ ====================
+
+/**
+ * @swagger
+ * /products:
+ *   get:
+ *     summary: Получить список всех товаров
+ *     tags: [Products]
+ *     responses:
+ *       200:
+ *         description: Успешный ответ со списком товаров
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 $ref: '#/components/schemas/Product'
+ */
 app.get('/products', (req, res) => {
     res.json(products);
 });
 
-// GET /products/:id - товар по ID
+/**
+ * @swagger
+ * /products/{id}:
+ *   get:
+ *     summary: Получить товар по ID
+ *     tags: [Products]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: ID товара
+ *     responses:
+ *       200:
+ *         description: Данные товара
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Product'
+ *       404:
+ *         description: Товар не найден
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
 app.get('/products/:id', (req, res) => {
     const id = parseInt(req.params.id);
     const product = products.find(p => p.id === id);
+    
     if (!product) {
         return res.status(404).json({ error: 'Товар не найден' });
     }
+    
     res.json(product);
 });
 
-// POST /products - добавить товар
+/**
+ * @swagger
+ * /products:
+ *   post:
+ *     summary: Создать новый товар
+ *     tags: [Products]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - name
+ *               - category
+ *               - description
+ *               - price
+ *               - stock
+ *             properties:
+ *               name:
+ *                 type: string
+ *                 example: "Новая игровая мышь"
+ *               category:
+ *                 type: string
+ *                 example: "Мыши"
+ *               description:
+ *                 type: string
+ *                 example: "Описание нового товара"
+ *               price:
+ *                 type: number
+ *                 example: 5990
+ *               stock:
+ *                 type: integer
+ *                 example: 10
+ *               rating:
+ *                 type: number
+ *                 example: 4.5
+ *     responses:
+ *       201:
+ *         description: Товар успешно создан
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Product'
+ *       400:
+ *         description: Ошибка валидации
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
 app.post('/products', (req, res) => {
     const { name, category, description, price, stock, rating } = req.body;
     
@@ -66,7 +239,64 @@ app.post('/products', (req, res) => {
     res.status(201).json(newProduct);
 });
 
-// PATCH /products/:id - обновить товар
+/**
+ * @swagger
+ * /products/{id}:
+ *   patch:
+ *     summary: Частично обновить товар
+ *     tags: [Products]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: ID товара
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               name:
+ *                 type: string
+ *                 example: "Обновлённое название"
+ *               category:
+ *                 type: string
+ *                 example: "Новая категория"
+ *               description:
+ *                 type: string
+ *                 example: "Обновлённое описание"
+ *               price:
+ *                 type: number
+ *                 example: 6990
+ *               stock:
+ *                 type: integer
+ *                 example: 20
+ *               rating:
+ *                 type: number
+ *                 example: 4.9
+ *     responses:
+ *       200:
+ *         description: Товар успешно обновлён
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Product'
+ *       400:
+ *         description: Нечего обновлять
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *       404:
+ *         description: Товар не найден
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
 app.patch('/products/:id', (req, res) => {
     const id = parseInt(req.params.id);
     const product = products.find(p => p.id === id);
@@ -76,6 +306,10 @@ app.patch('/products/:id', (req, res) => {
     }
     
     const { name, category, description, price, stock, rating } = req.body;
+    
+    if (name === undefined && category === undefined && description === undefined && price === undefined && stock === undefined && rating === undefined) {
+        return res.status(400).json({ error: 'Нечего обновлять' });
+    }
     
     if (name !== undefined) product.name = name.trim();
     if (category !== undefined) product.category = category.trim();
@@ -87,7 +321,37 @@ app.patch('/products/:id', (req, res) => {
     res.json(product);
 });
 
-// DELETE /products/:id - удалить товар
+/**
+ * @swagger
+ * /products/{id}:
+ *   delete:
+ *     summary: Удалить товар
+ *     tags: [Products]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: ID товара
+ *     responses:
+ *       200:
+ *         description: Товар успешно удалён
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                   example: "Товар успешно удалён"
+ *       404:
+ *         description: Товар не найден
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
 app.delete('/products/:id', (req, res) => {
     const id = parseInt(req.params.id);
     const index = products.findIndex(p => p.id === id);
@@ -97,9 +361,11 @@ app.delete('/products/:id', (req, res) => {
     }
     
     products.splice(index, 1);
-    res.json({ message: 'Товар удалён' });
+    res.json({ message: 'Товар успешно удалён' });
 });
 
+// Запуск сервера
 app.listen(port, () => {
     console.log(`Сервер запущен на http://localhost:${port}`);
+    console.log(`Swagger документация доступна на http://localhost:${port}/api-docs`);
 });
